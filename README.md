@@ -19,7 +19,7 @@
 
 ### 📖 如何使用
 
-1.  **安装插件**: 确保你已安装 [此插件](https://www.tampermonkey.net/) 。
+1.  **安装插件**: 确保你已安装 [此插件](https://chromewebstore.google.com/detail/ihogekafhlcehfbapfabdjbijmjgndil?utm_source=item-share-cb) 。
 2.  **呼出设置**: 在任意网页，点击浏览器右上角的插件图标，在弹出页面中`设置生词和API`。
 3.  **填写生词**: 在“生词设置”的单词列表里，每行输入一个你想要学习和翻译的单词。
 4.  **配置 API**:
