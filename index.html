@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Semi-Translator - 半沉浸式网页翻译助手</title>
+
+    <meta name="description" content="告别全文翻译的干扰，只高亮并翻译你的专属生词库。Semi-Translator 为深度阅读者设计，让外语学习无缝融入你的阅读心流。">
+    <meta name="keywords" content="翻译插件, 网页翻译, 沉浸式学习, 英语学习, Chrome扩展, Tampermonkey, 油猴脚本, AI翻译">
+    <meta name="author" content="Semi-Translator">
+
+    <meta property="og:title" content="Semi-Translator - 半沉浸式网页翻译助手">
+    <meta property="og:description" content="在任何网页上，只高亮并翻译你的专属生词库，让外语学习无缝融入你的阅读心流。">
+    <meta property="og:image" content="https://semitranslator.github.io/assets/icon-512.png">
+    <meta property="og:url" content="https://semitranslator.github.io">
+    <meta property="og:type" content="website">
+
+    <link rel="icon" href="./assets/favicon.ico" type="image/x-icon">
+    <link rel="shortcut icon" href="./assets/favicon.ico" type="image/x-icon">
+    <link rel="apple-touch-icon" href="./assets/icon128.png">
+
+    <script src="https://unpkg.com/@studio-freight/lenis@1.0.42/dist/lenis.min.js"></script>
+
+    <style>
+        /* --- 全局样式与变量 (优化后配色) --- */
+        :root {
+            --primary-color: #4A90E2;
+            /* A softer, modern blue */
+            --accent-color: #50E3C2;
+            /* A vibrant mint for highlights */
+            --dark-color: #1F2937;
+            /* A slightly softer dark tone */
+            --gray-color: #4B5563;
+            /* Unchanged, good for body text */
+            --light-gray-color: #F9FAFB;
+            /* Unchanged, clean background */
+            --white-color: #FFFFFF;
+            /* Pure white */
+            --border-color: #E5E7EB;
+            /* Unchanged, subtle borders */
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* 优化：移除默认滚动条，Lenis接管 */
+
+        html {
+            scroll-behavior: smooth;
+            scrollbar-width: none;
+            /* For Firefox */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            line-height: 1.7;
+            color: var(--gray-color);
+            background-color: var(--white-color);
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: var(--dark-color);
+            font-weight: 800;
+            line-height: 1.3;
+            margin-bottom: 1rem;
+            letter-spacing: -0.5px;
+            /* 优化：字间距微调 */
+        }
+
+        h1 {
+            font-size: 3.2rem;
+            letter-spacing: -1.5px;
+            /* 优化：主标题更紧凑有力 */
+        }
+
+        h2 {
+            font-size: 2.25rem;
+        }
+
+        h3 {
+            font-size: 1.5rem;
+        }
+
+        p {
+            margin-bottom: 1rem;
+        }
+
+        section {
+            padding: 6rem 0;
+        }
+
+        /* --- 改进：更丝滑的进入动画 --- */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(40px) scale(0.98);
+            transition: opacity 1s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 1s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        /* --- 按钮样式 (已采纳建议进行升级) --- */
+        .btn {
+            display: inline-block;
+            padding: 0.9rem 2.2rem;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: none;
+            font-size: 1rem;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: var(--white-color);
+            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.2);
+            transition: color 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.3s ease,
+                box-shadow 0.3s ease;
+        }
+
+        .btn-primary span {
+            position: relative;
+            z-index: 2;
+        }
+
+        .btn-primary::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--accent-color), var(--primary-color) 50%, var(--accent-color));
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+            z-index: -1;
+        }
+
+        .btn-primary:hover {
+            color: #1F2937;
+            transform: translateY(-3px);
+            box-shadow: 0 7px 20px rgba(74, 144, 226, 0.4);
+        }
+
+        .btn-primary:hover::before {
+            transform: scaleX(1);
+            transform-origin: right;
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            color: var(--dark-color);
+            border: 2px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--light-gray-color);
+            border-color: var(--gray-color);
+            color: var(--dark-color);
+        }
+
+        /* --- 导航栏 (优化毛玻璃效果) --- */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 1.2rem 0;
+            background-color: rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .navbar.scrolled {
+            background-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .navbar .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--dark-color);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+
+        .navbar .logo img {
+            width: 32px;
+            height: 32px;
+            margin-right: 0.75rem;
+        }
+
+        .navbar .nav-links a {
+            color: var(--gray-color);
+            text-decoration: none;
+            margin-left: 1.5rem;
+            font-weight: 500;
+            transition: color 0.3s ease;
+            position: relative;
+            padding-bottom: 5px;
+        }
+
+        .navbar .nav-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .navbar .nav-links a::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            transform: scaleX(0);
+            height: 2px;
+            bottom: 0;
+            left: 0;
+            background-color: var(--primary-color);
+            transform-origin: bottom right;
+            transition: transform 0.3s ease-out;
+        }
+
+        .navbar .nav-links a:hover::after {
+            transform: scaleX(1);
+            transform-origin: bottom left;
+        }
+
+
+        /* --- Hero 区域 --- */
+        .hero {
+            background-color: var(--light-gray-color);
+            padding: 10rem 0 8rem 0;
+            text-align: center;
+        }
+
+        .hero .container {
+            max-width: 800px;
+        }
+
+        .hero h1 {
+            background: linear-gradient(45deg, var(--primary-color) 30%, var(--accent-color) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1.5rem;
+            background-size: 200% 200%;
+            animation: gradient-flow 10s ease infinite;
+            transition: all 0.5s ease;
+            cursor: default;
+        }
+
+        .hero h1:hover {
+            text-shadow: 0 0 20px rgba(74, 144, 226, 0.3);
+        }
+
+        @keyframes gradient-flow {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--gray-color);
+            margin-bottom: 2.5rem;
+            max-width: 650px;
+            /* 优化：限制段落宽度，更易读 */
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .hero-image-wrapper {
+            margin-top: 5rem;
+            /* 优化：增加图片与按钮间距 */
+        }
+
+        .hero-image-wrapper img {
+            max-width: 100%;
+            border-radius: 12px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            /* 优化：为图片增加动画 */
+            opacity: 0;
+            transform: translateY(20px);
+            animation: lift-up 1s cubic-bezier(0.215, 0.61, 0.355, 1) 0.5s forwards;
+        }
+
+        @keyframes lift-up {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* --- 特性区域 --- */
+        .features .text-center {
+            text-align: center;
+            max-width: 700px;
+            margin: 0 auto 4rem auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            align-items: stretch;
+        }
+
+        .feature-card {
+            background: var(--white-color);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2.5rem;
+            /* 优化：增加内边距 */
+            text-align: left;
+            /* 优化：左对齐更专业 */
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-color: var(--primary-color);
+        }
+
+        .feature-card h3 {
+            text-align: center;
+            /* 标题居中保持设计感 */
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-card p {
+            flex-grow: 1;
+            /* 让文字部分占据多余空间 */
+        }
+
+        .feature-card img {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 8px;
+            margin-top: 1.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        /* --- 新增：打赏区域 --- */
+        .sponsor {
+            background-color: var(--light-gray-color);
+        }
+
+        .sponsor .text-center {
+            max-width: 700px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .sponsor h2 {
+            margin-bottom: 1rem;
+        }
+
+        .sponsor p {
+            font-size: 1.1rem;
+            color: var(--gray-color);
+            margin-bottom: 3rem;
+        }
+
+        .sponsor-grid {
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .sponsor-card {
+            text-align: center;
+        }
+
+        .sponsor-card img {
+            max-width: 180px;
+            height: auto;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 1rem;
+        }
+
+        .sponsor-card h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+
+        /* --- CTA 区域 --- */
+        .cta {
+            background: var(--dark-color);
+            color: var(--white-color);
+            text-align: center;
+        }
+
+        .cta .container {
+            padding: 5rem 2rem;
+        }
+
+        .cta h2,
+        .cta p {
+            color: var(--white-color);
+        }
+
+        .cta .btn-primary:hover {
+            background-color: var(--light-gray-color) !important;
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 7px 20px rgba(255, 255, 255, 0.3);
+        }
+
+
+        /* --- Footer --- */
+        .footer {
+            background-color: var(--dark-color);
+            color: #9CA3AF;
+            padding: 4rem 0 2rem 0;
+            /* 优化：底部padding减小 */
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .footer p {
+            margin-bottom: 0.75rem;
+        }
+
+        .footer a {
+            color: var(--white-color);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .footer a:hover {
+            color: var(--primary-color);
+        }
+
+        /* --- 响应式设计 --- */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+
+            h2 {
+                font-size: 1.8rem;
+            }
+
+            p {
+                font-size: 1rem;
+            }
+
+            .hero {
+                padding: 8rem 0 6rem 0;
+            }
+
+            .hero p {
+                font-size: 1.1rem;
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+                align-items: center;
+                gap: 1.5rem;
+            }
+
+            .btn {
+                width: 80%;
+                text-align: center;
+            }
+
+            .navbar .nav-links {
+                display: none;
+            }
+
+            .sponsor-grid {
+                gap: 2rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav class="navbar">
+        <div class="container">
+            <a href="#" class="logo">
+                <img src="./assets/icon128.png" alt="Semi-Translator Logo">
+                Semi-Translator
+            </a>
+            <div class="nav-links">
+                <a href="https://github.com/semitranslator/semitranslator.github.io" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container fade-in">
+            <h1>沉浸阅读，只“点亮”你的生词</h1>
+            <p>告别“全文翻译”的生硬与干扰。Semi-Translator 只高亮并翻译你的专属生词，保护你的阅读心流，让语言学习自然发生。</p>
+            <div class="hero-buttons">
+                <a href="#" class="btn btn-primary">从 Chrome 商店获取</a>
+                <a href="https://greasyfork.org/zh-CN/scripts/546713-%E5%8D%8A%E6%B2%89%E6%B5%B8%E5%BC%8F%E7%BD%91%E9%A1%B5%E7%BF%BB%E8%AF%91%E5%8A%A9%E6%89%8B-semi-immersive-helper"
+                    target="_blank" class="btn btn-secondary">获取 Greasy Fork 脚本</a>
+            </div>
+            <div class="hero-image-wrapper">
+                <img src="./assets/resultmini-2.png" alt="半沉浸式翻译效果截图">
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section id="features" class="features">
+            <div class="container">
+                <div class="text-center fade-in">
+                    <h2>在专注与求知间，找到优雅的平衡点</h2>
+                    <p>传统的翻译工具要么全盘汉化，破坏语境；要么频繁打断，割裂思路。</p>
+                    <p>Semi-Translator 为你带来第三种选择，一种更专注、更高效的选择。</p>
+                </div>
+                <div class="features-grid">
+
+                    <div class="feature-card fade-in" style="transition-delay: 100ms;">
+                        <div>
+                            <h3>建立你的专属词库</h3>
+                            <p>通过简洁的设置面板，轻松添加、管理你的生词列表。哪个单词翻译，你说了算。</p>
+                        </div>
+                        <img src="./assets/wordsetting.png" alt="生词设置面板">
+                    </div>
+                    <div class="feature-card fade-in" style="transition-delay: 200ms;">
+                        <div>
+                            <h3>开放的 AI 内核</h3>
+                            <p>支持 OpenAI 兼容及自定义 API 接口。你可以接入任何强大的大语言模型，获得联系上下文的、最精准的翻译。</p>
+                        </div>
+                        <img src="./assets/LLMsettings.png" alt="API 设置面板">
+                    </div>
+                    <div class="feature-card fade-in" style="transition-delay: 300ms;">
+                        <div>
+                            <h3>精准高亮，行内释义</h3>
+                            <p>翻译只在你关心的生词处出现，释义以内联形式优雅呈现，目光无需离开原文，体验如丝般顺滑。</p>
+                        </div>
+                        <img src="./assets/result.png" alt="行内翻译效果">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="sponsor" class="sponsor">
+            <div class="container text-center fade-in">
+                <h2>支持我们，为好想法充电</h2>
+                <p>如果它帮助到了您，请不吝赞赏，请我吃个🍗吧~</p>
+                <div class="sponsor-grid">
+                    <div class="sponsor-card ">
+                        <img src="./assets/zan.png" alt="微信支付二维码">
+                        <h4>微信支付</h4>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cta fade-in">
+            <div class="container">
+                <h2>准备好开启全新的外语阅读体验了吗？</h2>
+                <p>立即安装 Semi-Translator，开启更精准、更高效的学习之旅</p>
+                <br>
+                <a href="#" class="btn btn-primary" style="background: var(--white-color); color: var(--dark-color);">
+                    立即免费安装，体验无干扰阅读
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Semi-Translator. All Rights Reserved.</p>
+            <p>
+                本作品采用 <a href="http://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank"
+                    rel="license noopener noreferrer">CC BY-NC-SA 4.0</a> 国际许可协议进行许可。
+            </p>
+            <p>
+                由 <a href="https://github.com/semitranslator/semitranslator.github.io"
+                    target="_blank">semitranslator.github.io</a> 驱动
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // --- 保持原有 fade-in ---
+        const fadeInElements = document.querySelectorAll('.fade-in');
+        const observer = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+        fadeInElements.forEach(el => observer.observe(el));
+
+        // --- slogan 每字逐步浮现 ---
+        const slogan = document.querySelector('.hero h1');
+        const text = slogan.textContent;
+        slogan.textContent = "";
+        text.split("").forEach((ch, i) => {
+            const span = document.createElement("span");
+            span.textContent = ch;
+            span.style.animationDelay = `${i * 0.05}s`; // 每个字延迟
+            slogan.appendChild(span);
+        });
+
+        // --- 导航栏滚动阴影 ---
+        const navbar = document.querySelector('.navbar');
+        window.addEventListener('scroll', () => {
+            navbar.classList.toggle('scrolled', window.scrollY > 50);
+        });
+    </script>
+</body>
+
+</html>
